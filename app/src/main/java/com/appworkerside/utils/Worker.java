@@ -7,15 +7,17 @@ public class Worker {
     private String Nombre;
     private String Apellido;
     private String foto;
+    private String especializacion;
 
-    public Worker(String username, String nombre, String apellido, String foto) {
+    public Worker() {
+    }
+
+    public Worker(String username, String nombre, String apellido, String foto, String especializacion) {
         this.username = username;
         Nombre = nombre;
         Apellido = apellido;
         this.foto = foto;
-    }
-
-    public Worker() {
+        this.especializacion = especializacion;
     }
 
     public String getUsername() {
@@ -50,6 +52,14 @@ public class Worker {
         this.foto = foto;
     }
 
+    public String getEspecializacion() {
+        return especializacion;
+    }
+
+    public void setEspecializacion(String especializacion) {
+        this.especializacion = especializacion;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -58,12 +68,13 @@ public class Worker {
         return username.equals(worker.username) &&
                 Nombre.equals(worker.Nombre) &&
                 Apellido.equals(worker.Apellido) &&
-                foto.equals(worker.foto);
+                foto.equals(worker.foto) &&
+                especializacion.equals(worker.especializacion);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(username, Nombre, Apellido, foto);
+        return Objects.hash(username, Nombre, Apellido, foto, especializacion);
     }
 }
 
