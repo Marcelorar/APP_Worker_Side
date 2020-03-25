@@ -1,20 +1,11 @@
 package com.appworkerside.ui.login;
 
 import android.app.Activity;
-
-import androidx.annotation.NonNull;
-import androidx.lifecycle.Observer;
-import androidx.lifecycle.ViewModelProviders;
-
 import android.content.Intent;
 import android.os.Bundle;
-
-import androidx.annotation.Nullable;
-import androidx.annotation.StringRes;
-import androidx.appcompat.app.AppCompatActivity;
-
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -24,20 +15,35 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.lifecycle.Observer;
+import androidx.lifecycle.ViewModelProviders;
+
+import com.appworkerside.DataRegistry;
 import com.appworkerside.MapsActivity;
 import com.appworkerside.R;
-import com.appworkerside.ui.login.LoginViewModel;
-import com.appworkerside.ui.login.LoginViewModelFactory;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.Query;
+import com.google.firebase.database.ValueEventListener;
 
 public class LoginWorker extends AppCompatActivity {
 
     private LoginViewModel loginViewModel;
     private FirebaseAuth mAuth;
+    private FirebaseDatabase database;
+    private DatabaseReference myRef;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -126,7 +132,11 @@ public class LoginWorker extends AppCompatActivity {
             }
         });
 
+        //firebase
         mAuth = FirebaseAuth.getInstance();
+        database = FirebaseDatabase.getInstance();
+        myRef = database.getReference("workers");
+
     }
 
     private void updateUiWithUser(LoggedInUserView model) {
@@ -144,9 +154,10 @@ public class LoginWorker extends AppCompatActivity {
         super.onStart();
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser != null) {
-            Toast.makeText(getApplicationContext(), "Benvenido de vuelta!", Toast.LENGTH_SHORT).show();
-            moveToMap();
+            validateDataExistence("Bienvenido de vuelta!");
+
         }
+
     }
 
 
@@ -156,7 +167,7 @@ public class LoginWorker extends AppCompatActivity {
                     @Override
                     public void onComplete(@NonNull Task<AuthResult> task) {
                         if (task.isSuccessful()) {
-                            moveToMap();
+                            validateDataExistence("Bienvenido!");
                         } else {
                             createAccount(username, password);
                             Toast.makeText(LoginWorker.this, "Ahora estas Registrado!",
@@ -168,6 +179,32 @@ public class LoginWorker extends AppCompatActivity {
     }
 
 
+    private void validateDataExistence(final String mensaje) {
+        Query query = myRef.orderByChild("workUser/username").equalTo(mAuth.getCurrentUser().getEmail().replace("@", "+").replace(".", "-"));
+        query.addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                Log.i("Estatus", "Test");
+                if (dataSnapshot.exists()) {
+                    Log.i("Estatus", "Existe");
+                    Toast.makeText(getApplicationContext(), mensaje, Toast.LENGTH_SHORT).show();
+                    moveToMap();
+                } else {
+                    Log.i("Estatus", " No Existe");
+                    moveToRegistry();
+                }
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) {
+            }
+        });
+    }
+
+    private void moveToRegistry() {
+        Intent intent = new Intent(this, DataRegistry.class);
+        startActivity(intent);
+    }
 
     private void moveToMap(){
         Intent intent = new Intent(this, MapsActivity.class);
@@ -181,7 +218,7 @@ public class LoginWorker extends AppCompatActivity {
                     @Override
                     public void onComplete(@NonNull Task<AuthResult> task) {
                         if (task.isSuccessful()) {
-                            moveToMap();
+                            moveToRegistry();
                         } else Toast.makeText(LoginWorker.this, "Ups, algo ha fallado.",
                                 Toast.LENGTH_SHORT).show();
                     }

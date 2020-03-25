@@ -1,13 +1,10 @@
 package com.appworkerside;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
-import androidx.core.app.ActivityCompat;
-import androidx.fragment.app.FragmentActivity;
-
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.graphics.Point;
 import android.location.Location;
 import android.location.LocationListener;
@@ -22,6 +19,12 @@ import android.view.animation.Interpolator;
 import android.view.animation.LinearInterpolator;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
+import androidx.core.app.ActivityCompat;
+import androidx.fragment.app.FragmentActivity;
+
+import com.appworkerside.utils.Posicion;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -29,12 +32,16 @@ import com.google.android.gms.maps.Projection;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.MapStyleOptions;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.firebase.auth.FirebaseAuth;
-
-import java.util.List;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback, LocationListener {
 
@@ -45,8 +52,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private LatLng currentLocation;
     private Location initialLocation;
     Marker mCurrLocationMarker;
-    private FirebaseAuth mAuth;
 
+    private FirebaseAuth mAuth;
+    private FirebaseDatabase database;
+    private DatabaseReference myRef;
+    private StorageReference myPics;
+
+    private FloatingActionButton workSwitch;
+    private boolean state;
     @RequiresApi(api = Build.VERSION_CODES.M)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -87,13 +100,50 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
 
         mAuth = FirebaseAuth.getInstance();
+        database = FirebaseDatabase.getInstance();
+        myPics = FirebaseStorage.getInstance().getReference();
+
+        workSwitch = findViewById(R.id.workSwitch);
+        workSwitch.setEnabled(false);
+        workSwitch.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
+        state = false;
+        workSwitch.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (!state) {
+                    if (mMap != null) {
+                        updateState(true);
+                        mMap.setMapStyle(
+                                MapStyleOptions.loadRawResourceStyle(
+                                        MapsActivity.this, R.raw.map_off));
+                        workSwitch.setBackgroundTintList(ColorStateList.valueOf(Color.RED));
+                        Toast.makeText(MapsActivity.this, "Apagado!", Toast.LENGTH_LONG).show();
+                    }
+                } else {
+                    if (mMap != null) {
+                        updateState(false);
+                        mMap.setMapStyle(
+                                MapStyleOptions.loadRawResourceStyle(
+                                        MapsActivity.this, R.raw.map_on));
+                        workSwitch.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
+                        Toast.makeText(MapsActivity.this, "Encendido!", Toast.LENGTH_LONG).show();
+                    }
+                }
+                state = !state;
+            }
+        });
+
+
     }
 
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
-
+        mMap.setMapStyle(
+                MapStyleOptions.loadRawResourceStyle(
+                        MapsActivity.this, R.raw.map_on));
+        workSwitch.setEnabled(true);
         mMap.setMinZoomPreference(10.0f);
         mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(initialLocation.getLatitude(), initialLocation.getLongitude()), 19.f));
 
@@ -119,7 +169,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     public void onLocationChanged(Location location) {
         currentLocation = new LatLng(location.getLatitude(),
                 location.getLongitude());
-        animateMarker(mCurrLocationMarker,currentLocation,false);
+        updatePosition(location);
+        if (mMap != null) animateMarker(mCurrLocationMarker, currentLocation, false);
     }
     @Override
     public void onProviderDisabled(String provider) {
@@ -169,6 +220,28 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         marker.setVisible(true);
                     }
                 }
+            }
+        });
+    }
+
+    private void updatePosition(Location location) {
+        myRef = database.getReference("workers");
+        myRef.child(mAuth.getCurrentUser().getEmail().replace("@", "+").replace(".", "-"))
+                .child("posicion").setValue(new Posicion(location.getLatitude(), location.getLongitude())).addOnSuccessListener(new OnSuccessListener<Void>() {
+            @Override
+            public void onSuccess(Void aVoid) {
+                Log.i("Real:", "Posicion actualizada");
+            }
+        });
+    }
+
+    private void updateState(final boolean state) {
+        myRef = database.getReference("workers");
+        myRef.child(mAuth.getCurrentUser().getEmail().replace("@", "+").replace(".", "-"))
+                .child("visible").setValue(state).addOnSuccessListener(new OnSuccessListener<Void>() {
+            @Override
+            public void onSuccess(Void aVoid) {
+                Log.i("Real:", "Estado actualizado");
             }
         });
     }
