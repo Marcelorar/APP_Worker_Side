@@ -180,6 +180,7 @@ public class LoginWorker extends AppCompatActivity {
 
 
     private void validateDataExistence(final String mensaje) {
+        myRef = database.getReference("workers");
         Query query = myRef.orderByChild("workUser/username").equalTo(mAuth.getCurrentUser().getEmail().replace("@", "+").replace(".", "-"));
         query.addListenerForSingleValueEvent(new ValueEventListener() {
             @Override
