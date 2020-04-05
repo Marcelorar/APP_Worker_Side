@@ -1,18 +1,19 @@
 package com.appworkerside;
 
 import android.Manifest;
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.os.PersistableBundle;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -23,9 +24,11 @@ import android.widget.Spinner;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.FileProvider;
 
 import com.appworkerside.utils.Posicion;
 import com.appworkerside.utils.Profesion;
@@ -44,13 +47,15 @@ import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
 
-import java.io.FileNotFoundException;
-import java.io.InputStream;
+import java.io.File;
+import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 public class DataRegistry extends AppCompatActivity implements LocationListener {
-    private static final int GALLERY_REQUEST_CODE = 1;
+    static final int REQUEST_IMAGE_CAPTURE = 1;
     private static final int PERMISSIONS = 0;
     protected LocationManager locationManager;
     private FirebaseAuth mAuth;
@@ -63,6 +68,7 @@ public class DataRegistry extends AppCompatActivity implements LocationListener 
     private ImageButton foto;
     private Button guardar;
     private Uri upFoto;
+    private String currentPhotoPath;
     private List<Profesion> profesions;
     private List<Profesion> fitProfesions;
     private boolean posibleUbicar;
@@ -71,21 +77,33 @@ public class DataRegistry extends AppCompatActivity implements LocationListener 
     private View.OnClickListener imageClick = new View.OnClickListener() {
         @Override
         public void onClick(View v) {
-            Intent intent = new Intent(Intent.ACTION_PICK);
-            // Sets the type as image/*. This ensures only components of type image are selected
-            intent.setType("image/*");
-            //We pass an extra array with the accepted mime types. This will ensure only components with these MIME types as targeted.
-            String[] mimeTypes = {"image/jpeg"};
-            intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
-            // Launching the Intent
-            startActivityForResult(intent, GALLERY_REQUEST_CODE);
+            Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            // Ensure that there's a camera activity to handle the intent
+            if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
+                // Create the File where the photo should go
+                File photoFile = null;
+                try {
+                    photoFile = createImageFile();
+                } catch (IOException ex) {
+                    Toast.makeText(DataRegistry.this, "Algo salio mal al guardar tu foto!", Toast.LENGTH_LONG).show();
+                }
+                // Continue only if the File was successfully created
+                if (photoFile != null) {
+                    Uri photoURI = FileProvider.getUriForFile(DataRegistry.this,
+                            "com.appworkerside.android.fileprovider",
+                            photoFile);
+                    upFoto = photoURI;
+                    takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
+                    startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
+                }
+            }
         }
     };
     private View.OnClickListener saveClick = new View.OnClickListener() {
         @Override
         public void onClick(View v) {
 
-            final StorageReference photoRef = myPics.child("images/" + mAuth.getCurrentUser().getEmail().replace(".", "_") + ".png");
+            final StorageReference photoRef = myPics.child("images/" + mAuth.getCurrentUser().getEmail().replace(".", "_") + ".jpg");
             myRef = database.getReference("workers");
             myRef.child(mAuth.getCurrentUser().getEmail().replace("@", "+").replace(".", "-"))
                     .setValue(new WorkerLocation(new Posicion(currentLocation.latitude, currentLocation.longitude),
@@ -96,8 +114,9 @@ public class DataRegistry extends AppCompatActivity implements LocationListener 
                                     , mAuth.getCurrentUser().getEmail().replace(".", "_") + ".png"
                                     , profesion.getSelectedItem().toString()
                             ),
-                            5.f,
-                            true
+                            5.f
+                            , true
+                            , false
                     )).addOnSuccessListener(new OnSuccessListener<Void>() {
                 @Override
                 public void onSuccess(Void aVoid) {
@@ -122,15 +141,22 @@ public class DataRegistry extends AppCompatActivity implements LocationListener 
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_data_registry);
 
+        mAuth = FirebaseAuth.getInstance();
+        database = FirebaseDatabase.getInstance();
+        myPics = FirebaseStorage.getInstance().getReference();
+
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             if (ActivityCompat.shouldShowRequestPermissionRationale(this,
                     Manifest.permission.ACCESS_FINE_LOCATION) && ActivityCompat.shouldShowRequestPermissionRationale(this,
-                    Manifest.permission.ACCESS_COARSE_LOCATION)) {
+                    Manifest.permission.ACCESS_COARSE_LOCATION) && ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.CAMERA) && ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 Toast.makeText(DataRegistry.this, "Permisos Necesarios :(!", Toast.LENGTH_LONG).show();
             } else {
                 ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},
+                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE},
                         PERMISSIONS);
                 posibleUbicar = true;
             }
@@ -148,38 +174,52 @@ public class DataRegistry extends AppCompatActivity implements LocationListener 
         foto.setOnClickListener(imageClick);
         guardar.setOnClickListener(saveClick);
 
-        mAuth = FirebaseAuth.getInstance();
-        database = FirebaseDatabase.getInstance();
-        myPics = FirebaseStorage.getInstance().getReference();
-
         profesions = new ArrayList<>();
         fitProfesions = new ArrayList<>();
+
+        loadProfesions();
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        loadProfesions();
     }
+
+    @Override
+    public void onPostCreate(@Nullable Bundle savedInstanceState, @Nullable PersistableBundle persistentState) {
+        super.onPostCreate(savedInstanceState, persistentState);
+    }
+
+    private File createImageFile() throws IOException {
+        // Create an image file name
+        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        String imageFileName = "JPEG_" + timeStamp + "_";
+        File storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        File image = File.createTempFile(
+                imageFileName,  /* prefix */
+                ".jpg",         /* suffix */
+                storageDir      /* directory */
+        );
+
+        // Save a file: path for use with ACTION_VIEW intents
+        currentPhotoPath = image.getAbsolutePath();
+        return image;
+    }
+
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-
-        if (resultCode == Activity.RESULT_OK) {
+        if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
             try {
-                Uri selectedImage = data.getData();
-                upFoto = selectedImage;
-                final InputStream imageStream = getContentResolver().openInputStream(selectedImage);
-                final Bitmap image = BitmapFactory.decodeStream(imageStream);
-                foto.setImageBitmap(image);
-            } catch (FileNotFoundException e) {
+                Bitmap imageBitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), upFoto);
+                foto.setImageBitmap(imageBitmap);
+            } catch (IOException e) {
+                Toast.makeText(DataRegistry.this, "Error en Camara :(", Toast.LENGTH_LONG).show();
                 e.printStackTrace();
-                Toast.makeText(DataRegistry.this, "Algo salio Mal", Toast.LENGTH_LONG).show();
             }
 
         } else {
-
             Toast.makeText(DataRegistry.this, "Debes escoger una foto!", Toast.LENGTH_LONG).show();
         }
 
@@ -229,9 +269,10 @@ public class DataRegistry extends AppCompatActivity implements LocationListener 
     public void onRequestPermissionsResult(int requestCode,
                                            @NonNull String[] permissions, @NonNull int[] grantResults) {
         // If request is cancelled, the result arrays are empty.
-        posibleUbicar = ((requestCode == PERMISSIONS) && (grantResults.length > 0)
-                //2 tipos de ubicaciones permitidas
-                && (grantResults[0] == PackageManager.PERMISSION_GRANTED) && (grantResults[1] == PackageManager.PERMISSION_GRANTED));
+        if (!((requestCode == PERMISSIONS) && (grantResults.length > 0)
+                && (grantResults[0] == PackageManager.PERMISSION_GRANTED) && (grantResults[1] == PackageManager.PERMISSION_GRANTED)
+                && (grantResults[2] == PackageManager.PERMISSION_GRANTED) && (grantResults[3] == PackageManager.PERMISSION_GRANTED)))
+            finish();
     }
 
     @Override

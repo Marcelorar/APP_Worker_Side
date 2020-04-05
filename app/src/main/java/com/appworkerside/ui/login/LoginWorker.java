@@ -51,6 +51,11 @@ public class LoginWorker extends AppCompatActivity {
         loginViewModel = ViewModelProviders.of(this, new LoginViewModelFactory())
                 .get(LoginViewModel.class);
 
+        //firebase
+        mAuth = FirebaseAuth.getInstance();
+        database = FirebaseDatabase.getInstance();
+        myRef = database.getReference("workers");
+
         final EditText usernameEditText = findViewById(R.id.username);
         final EditText passwordEditText = findViewById(R.id.password);
         final Button loginButton = findViewById(R.id.login);
@@ -131,12 +136,6 @@ public class LoginWorker extends AppCompatActivity {
                         passwordEditText.getText().toString());
             }
         });
-
-        //firebase
-        mAuth = FirebaseAuth.getInstance();
-        database = FirebaseDatabase.getInstance();
-        myRef = database.getReference("workers");
-
     }
 
     private void updateUiWithUser(LoggedInUserView model) {
@@ -154,8 +153,8 @@ public class LoginWorker extends AppCompatActivity {
         super.onStart();
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser != null) {
+            Log.i("Usuario Actual", currentUser.getEmail());
             validateDataExistence("Bienvenido de vuelta!");
-
         }
 
     }

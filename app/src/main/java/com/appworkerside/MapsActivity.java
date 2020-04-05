@@ -21,11 +21,11 @@ import android.view.animation.LinearInterpolator;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.FragmentActivity;
 
-import com.appworkerside.utils.Locker;
 import com.appworkerside.utils.Posicion;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -40,16 +40,10 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.Query;
-import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
-
-import java.util.Objects;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback, LocationListener {
 
@@ -63,10 +57,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private Handler handler;
     private int delay; //milliseconds
-
-    private Locker ordering;
-    private Locker resOrdering;
-    private boolean locked;
 
     private FirebaseAuth mAuth;
     private FirebaseDatabase database;
@@ -152,7 +142,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         delay = 1000; //milliseconds
         handler.postDelayed(new Runnable() {
             public void run() {
-                //if(locked) moveToProcess();
+                if (checkLock()) moveToProcess();
                 handler.postDelayed(this, delay);
             }
 
@@ -167,7 +157,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mMap.setMapStyle(
                 MapStyleOptions.loadRawResourceStyle(
                         MapsActivity.this, R.raw.map_on));
-        workSwitch.setEnabled(true);
         mMap.setMinZoomPreference(10.0f);
         mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(initialLocation.getLatitude(), initialLocation.getLongitude()), 19.f));
 
@@ -178,6 +167,12 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         markerOptions.title(mAuth.getCurrentUser().getEmail());
         markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_MAGENTA));
         mCurrLocationMarker = mMap.addMarker(markerOptions);
+    }
+
+    @Override
+    protected void onPostCreate(@Nullable Bundle savedInstanceState) {
+        super.onPostCreate(savedInstanceState);
+        workSwitch.setEnabled(true);
     }
 
     @Override
@@ -270,39 +265,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         });
     }
 
-
-    private void lockSaver() {
-        ordering = resOrdering;
-    }
-
-    private void checkLock() {
-        myRef = database.getReference("locked");
-        Query query = myRef;
-        query.addListenerForSingleValueEvent(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
-                locked = false;
-                if (dataSnapshot.exists()) {
-                    for (DataSnapshot lock : dataSnapshot.getChildren()) {
-                        Log.i("Errores", lock.getValue(Locker.class).getWorker().getNombre());
-                        if (Objects.requireNonNull(lock.getValue(Locker.class)).toString().split(";")[1].equals(mAuth.getCurrentUser().getEmail().replace("@", "+").replace(".", "-"))) {
-                            locked = true;
-                            resOrdering = lock.getValue(Locker.class);
-                            myRef = database.getReference("workers");
-                            myRef.child(mAuth.getCurrentUser().getEmail().replace("@", "+").replace(".", "-")).child("visible").setValue(false);
-                            break;
-                        }
-
-                    }
-                    lockSaver();
-                }
-            }
-
-            @Override
-            public void onCancelled(@NonNull DatabaseError databaseError) {
-
-            }
-        });
+    private boolean checkLock() {
+        return false;
     }
 
     private void moveToProcess() {
