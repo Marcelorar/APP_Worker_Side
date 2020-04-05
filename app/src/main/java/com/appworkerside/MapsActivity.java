@@ -4,8 +4,7 @@ import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.res.ColorStateList;
-import android.graphics.Color;
+import android.content.res.Resources;
 import android.graphics.Point;
 import android.location.Location;
 import android.location.LocationListener;
@@ -18,15 +17,17 @@ import android.util.Log;
 import android.view.View;
 import android.view.animation.Interpolator;
 import android.view.animation.LinearInterpolator;
+import android.widget.Switch;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.FragmentActivity;
 
 import com.appworkerside.utils.Posicion;
+import com.appworkerside.utils.WorkerLocation;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -40,8 +41,12 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.Query;
+import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 
@@ -62,9 +67,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private FirebaseDatabase database;
     private DatabaseReference myRef;
     private StorageReference myPics;
+    private WorkerLocation currentWorker = new WorkerLocation();
+    private WorkerLocation resCurrentWorker;
 
-    private FloatingActionButton workSwitch;
+    private TextView workerName;
+    private TextView workerProfesion;
+    private Switch workSwitch;
+
     private boolean state;
+
     @RequiresApi(api = Build.VERSION_CODES.M)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,6 +86,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
 
+
+        workerName = findViewById(R.id.workerName);
+        workerProfesion = findViewById(R.id.workerProfesion);
+        workSwitch = findViewById(R.id.workSwitch);
 
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -108,48 +123,56 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         database = FirebaseDatabase.getInstance();
         myPics = FirebaseStorage.getInstance().getReference();
 
-        workSwitch = findViewById(R.id.workSwitch);
-        workSwitch.setEnabled(false);
-        workSwitch.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
-        state = false;
-        workSwitch.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (!state) {
-                    if (mMap != null) {
-                        updateState(true);
-                        mMap.setMapStyle(
-                                MapStyleOptions.loadRawResourceStyle(
-                                        MapsActivity.this, R.raw.map_off));
-                        workSwitch.setBackgroundTintList(ColorStateList.valueOf(Color.RED));
-                        Toast.makeText(MapsActivity.this, "Apagado!", Toast.LENGTH_LONG).show();
-                    }
-                } else {
-                    if (mMap != null) {
-                        updateState(false);
-                        mMap.setMapStyle(
-                                MapStyleOptions.loadRawResourceStyle(
-                                        MapsActivity.this, R.raw.map_on));
-                        workSwitch.setBackgroundTintList(ColorStateList.valueOf(Color.BLACK));
-                        Toast.makeText(MapsActivity.this, "Encendido!", Toast.LENGTH_LONG).show();
-                    }
-                }
-                state = !state;
-            }
-        });
 
         handler = new Handler();
-        delay = 1000; //milliseconds
+        delay = 500; //milliseconds
         handler.postDelayed(new Runnable() {
             public void run() {
-                if (checkLock()) moveToProcess();
+                getCurrentWorker();
+                state = currentWorker.isVisible();
+
+                if (currentWorker.getWorkUser().getNombre() != null && workerName.getText().toString().isEmpty()) {
+                    workerName.setText(currentWorker.getWorkUser().getNombre() + " " + currentWorker.getWorkUser().getApellido());
+                    workerProfesion.setText(currentWorker.getWorkUser().getEspecializacion());
+                    workSwitch.setChecked(currentWorker.isVisible());
+                } else if (state != workSwitch.isChecked()) {
+                    updateState(workSwitch.isChecked());
+                }
+                if (mMap != null) {
+                    if (workSwitch.isChecked()) {
+                        try {
+                            boolean success = mMap.setMapStyle(
+                                    MapStyleOptions.loadRawResourceStyle(
+                                            MapsActivity.this, R.raw.map_on));
+
+                            if (!success) {
+                                Log.e("Mapa:", "Style parsing failed.");
+                            }
+                        } catch (Resources.NotFoundException e) {
+                            Log.e("Mapa", "Can't find style. Error: ", e);
+                        }
+                    } else {
+                        try {
+                            boolean success = mMap.setMapStyle(
+                                    MapStyleOptions.loadRawResourceStyle(
+                                            MapsActivity.this, R.raw.map_off));
+
+                            if (!success) {
+                                Log.e("Mapa:", "Style parsing failed.");
+                            }
+                        } catch (Resources.NotFoundException e) {
+                            Log.e("Mapa", "Can't find style. Error: ", e);
+                        }
+                    }
+                }
+                if (currentWorker.isContratado()) moveToProcess();
                 handler.postDelayed(this, delay);
             }
 
         }, delay);
 
-    }
 
+    }
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
@@ -169,11 +192,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mCurrLocationMarker = mMap.addMarker(markerOptions);
     }
 
-    @Override
-    protected void onPostCreate(@Nullable Bundle savedInstanceState) {
-        super.onPostCreate(savedInstanceState);
-        workSwitch.setEnabled(true);
-    }
 
     @Override
     public void onRequestPermissionsResult(int requestCode,
@@ -265,8 +283,29 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         });
     }
 
-    private boolean checkLock() {
-        return false;
+    public void saverWorker() {
+        currentWorker = resCurrentWorker;
+    }
+
+
+    private void getCurrentWorker() {
+
+        myRef = database.getReference("workers");
+        Query query = myRef.orderByChild("workUser/username").equalTo(mAuth.getCurrentUser().getEmail().replace("@", "+").replace(".", "-"));
+        query.addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
+                if (dataSnapshot.exists()) {
+                    resCurrentWorker = dataSnapshot.getChildren().iterator().next().getValue(WorkerLocation.class);
+                    Log.i("Current", resCurrentWorker.getWorkUser().getNombre());
+                }
+                saverWorker();
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError databaseError) {
+            }
+        });
     }
 
     private void moveToProcess() {
