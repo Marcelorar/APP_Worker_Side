@@ -62,7 +62,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private Handler handler;
     private int delay; //milliseconds
-
+    private Runnable runn;
     private FirebaseAuth mAuth;
     private FirebaseDatabase database;
     private DatabaseReference myRef;
@@ -126,7 +126,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
         handler = new Handler();
         delay = 500; //milliseconds
-        handler.postDelayed(new Runnable() {
+        runn = new Runnable() {
             public void run() {
                 getCurrentWorker();
                 state = currentWorker.isVisible();
@@ -165,19 +165,20 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         }
                     }
                 }
-                if (currentWorker.isContratado()) moveToProcess();
+                if (currentWorker.getContratado() != null && !currentWorker.getContratado().isEmpty()) {
+                    moveToProcess();
+                }
                 handler.postDelayed(this, delay);
             }
 
-        }, delay);
-
-
+        };
     }
 
     @Override
     protected void onStart() {
         super.onStart();
         workSwitch.setChecked(true);
+        handler.postDelayed(runn, delay);
     }
 
     @Override
@@ -314,8 +315,16 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         });
     }
 
+    @Override
+    protected void onStop() {
+        super.onStop();
+        handler.removeCallbacks(runn);
+    }
+
     private void moveToProcess() {
         Intent intent = new Intent(this, OrderingProcess.class);
+        intent.putExtra("orderCode", currentWorker.getContratado());
+        intent.putExtra("currentUser", currentWorker);
         startActivity(intent);
     }
 

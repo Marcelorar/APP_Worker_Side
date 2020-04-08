@@ -116,7 +116,7 @@ public class DataRegistry extends AppCompatActivity implements LocationListener 
                             ),
                             5.f
                             , true
-                            , false
+                            , ""
                     )).addOnSuccessListener(new OnSuccessListener<Void>() {
                 @Override
                 public void onSuccess(Void aVoid) {
