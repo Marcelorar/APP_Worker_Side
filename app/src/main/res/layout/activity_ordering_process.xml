@@ -27,19 +27,12 @@
 
 
             <Button
-                android:id="@+id/aceptarWork"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Aceptar"
-                app:layout_constraintBaseline_toBaselineOf="@+id/cancelarWork"
-                app:layout_constraintStart_toStartOf="parent" />
-
-            <Button
                 android:id="@+id/cancelarWork"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="88dp"
                 android:text="Concluir"
-                app:layout_constraintStart_toEndOf="@+id/aceptarWork"
+                app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 

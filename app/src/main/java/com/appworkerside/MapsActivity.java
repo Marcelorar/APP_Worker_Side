@@ -1,7 +1,9 @@
 package com.appworkerside;
 
 import android.Manifest;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
@@ -26,6 +28,7 @@ import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.FragmentActivity;
 
+import com.appworkerside.utils.Pedido;
 import com.appworkerside.utils.Posicion;
 import com.appworkerside.utils.WorkerLocation;
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -47,6 +50,8 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.Query;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 
@@ -74,6 +79,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private TextView workerProfesion;
     private Switch workSwitch;
 
+    private Marker destino;
+    private Marker resDestino;
     private boolean state;
 
     @RequiresApi(api = Build.VERSION_CODES.M)
@@ -118,10 +125,77 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
         });
 
-
+        final FloatingActionButton chat = findViewById(R.id.chatButton);
+        chat.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                moveToProcess();
+            }
+        });
         mAuth = FirebaseAuth.getInstance();
         database = FirebaseDatabase.getInstance();
         myPics = FirebaseStorage.getInstance().getReference();
+
+
+        AlertDialog.Builder builder;
+        builder = new AlertDialog.Builder(MapsActivity.this);
+        builder.setTitle("Propuesta!");
+        builder.setMessage("Aceptas?");
+
+        builder.setPositiveButton("Sí", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int which) {
+                myRef = database.getReference("workers");
+                myRef.child(currentWorker.getWorkUser().getUsername()).child("visible").setValue(false).addOnSuccessListener(new
+                                                                                                                                     OnSuccessListener<Void>() {
+                                                                                                                                         @Override
+                                                                                                                                         public void onSuccess(Void aVoid) {
+                                                                                                                                             Toast.makeText(MapsActivity.this, "Aceptaste el contrato!", Toast.LENGTH_LONG).show();
+                                                                                                                                         }
+                                                                                                                                     });
+
+                chat.setVisibility(View.VISIBLE);
+                FirebaseFirestore.getInstance()
+                        .collection("contratos")
+                        .document(currentWorker.getContratado().trim()).get().addOnSuccessListener(new OnSuccessListener<DocumentSnapshot>() {
+                    @Override
+                    public void onSuccess(DocumentSnapshot documentSnapshot) {
+                        Posicion ps = documentSnapshot.toObject(Pedido.class).getDestino();
+                        resDestino = mMap.addMarker(new MarkerOptions()
+                                .position(new LatLng(ps.getLatitude(), ps.getLongitude()))
+                                .title("Destino")
+                                .draggable(false));
+                        saverDestino();
+                    }
+                });
+                dialog.dismiss();
+
+            }
+        });
+
+        builder.setNegativeButton("NO", new DialogInterface.OnClickListener() {
+
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                rechazarContrato();
+                dialog.dismiss();
+            }
+        });
+        final AlertDialog alert = builder.create();
+        alert.setOnShowListener(new DialogInterface.OnShowListener() {
+            @Override
+            public void onShow(DialogInterface dialog) {
+                handler.removeCallbacks(runn);
+            }
+        });
+
+        alert.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface dialog) {
+                handler.postDelayed(runn, delay);
+            }
+        });
+
+
 
 
         handler = new Handler();
@@ -165,9 +239,33 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                         }
                     }
                 }
-                if (currentWorker.getContratado() != null && !currentWorker.getContratado().isEmpty()) {
-                    moveToProcess();
+                if (currentWorker.getContratado() != null && !currentWorker.getContratado().isEmpty() && !chat.isShown() && currentWorker.isVisible()) {
+                    alert.show();
+                    final Handler handler = new Handler();
+                    final Runnable runnable = new Runnable() {
+                        @Override
+                        public void run() {
+                            if (alert.isShowing()) {
+                                rechazarContrato();
+                                alert.dismiss();
+                            }
+                        }
+                    };
+
+                    alert.setOnDismissListener(new DialogInterface.OnDismissListener() {
+                        @Override
+                        public void onDismiss(DialogInterface dialog) {
+                            handler.removeCallbacks(runnable);
+                        }
+                    });
+
+                    handler.postDelayed(runnable, 10000);
+
+                } else if (currentWorker.getContratado() != null && currentWorker.getContratado().isEmpty() && chat.isShown()) {
+                    chat.setVisibility(View.GONE);
+                    destino.remove();
                 }
+
                 handler.postDelayed(this, delay);
             }
 
@@ -179,6 +277,62 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         super.onStart();
         workSwitch.setChecked(true);
         handler.postDelayed(runn, delay);
+    }
+
+    private void saverDestino() {
+        destino = resDestino;
+    }
+
+    private void rechazarContrato() {
+        myRef = database.getReference("workers");
+        myRef
+                .child(currentWorker.getWorkUser()
+                        .getUsername())
+                .child("visible").setValue(true)
+                .addOnSuccessListener(new
+                                              OnSuccessListener<Void>() {
+                                                  @Override
+                                                  public void onSuccess(Void aVoid) {
+                                                      myRef = database.getReference("workers");
+                                                      myRef
+                                                              .child(currentWorker
+                                                                      .getWorkUser()
+                                                                      .getUsername())
+                                                              .child("contratado").setValue("").addOnSuccessListener(new
+                                                                                                                             OnSuccessListener<Void>() {
+                                                                                                                                 @Override
+                                                                                                                                 public void onSuccess(Void aVoid) {
+
+
+                                                                                                                                     FirebaseFirestore.getInstance()
+                                                                                                                                             .collection("contratos")
+                                                                                                                                             .document(currentWorker.getContratado().trim()).get().addOnSuccessListener(new OnSuccessListener<DocumentSnapshot>() {
+                                                                                                                                         @Override
+                                                                                                                                         public void onSuccess(DocumentSnapshot documentSnapshot) {
+                                                                                                                                             myRef = database.getReference("clients");
+                                                                                                                                             myRef
+                                                                                                                                                     .child((documentSnapshot.toObject(Pedido.class).getClient()).getCorreo())
+                                                                                                                                                     .child("contratando").setValue("");
+                                                                                                                                             FirebaseFirestore.getInstance()
+                                                                                                                                                     .collection("contratos")
+                                                                                                                                                     .document(currentWorker.getContratado().trim()).delete().addOnSuccessListener(new OnSuccessListener<Void>() {
+                                                                                                                                                 @Override
+                                                                                                                                                 public void onSuccess(Void aVoid) {
+                                                                                                                                                     Toast.makeText(MapsActivity.this, "Rechazaste el contrato!", Toast.LENGTH_LONG).show();
+                                                                                                                                                 }
+                                                                                                                                             });
+                                                                                                                                         }
+                                                                                                                                     });
+
+
+                                                                                                                                 }
+                                                                                                                             });
+
+
+                                                  }
+                                              });
+
+
     }
 
     @Override
@@ -197,6 +351,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         markerOptions.title(mAuth.getCurrentUser().getEmail());
         markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_MAGENTA));
         mCurrLocationMarker = mMap.addMarker(markerOptions);
+
     }
 
 

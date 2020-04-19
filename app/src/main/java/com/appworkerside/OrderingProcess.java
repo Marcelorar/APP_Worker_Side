@@ -9,7 +9,6 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
@@ -49,7 +48,6 @@ public class OrderingProcess extends AppCompatActivity {
         Log.i("chat code", getIntent().getStringExtra("orderCode"));
         FloatingActionButton fab =
                 findViewById(R.id.fab);
-        aceptarWork = findViewById(R.id.aceptarWork);
         cancelarWork = findViewById(R.id.cancelarWork);
 
         currentWorker = (WorkerLocation) getIntent().getSerializableExtra("currentUser");
@@ -85,24 +83,6 @@ public class OrderingProcess extends AppCompatActivity {
                     }
                 }
         );
-        if (!currentWorker.isVisible()) aceptarWork.setVisibility(View.GONE);
-        else aceptarWork.setVisibility(View.VISIBLE);
-
-
-        aceptarWork.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                myRef = database.getReference("workers");
-                myRef.child(currentWorker.getWorkUser().getUsername()).child("visible").setValue(false).addOnSuccessListener(new
-                                                                                                                                     OnSuccessListener<Void>() {
-                                                                                                                                         @Override
-                                                                                                                                         public void onSuccess(Void aVoid) {
-                                                                                                                                             aceptarWork.setVisibility(View.GONE);
-                                                                                                                                             Toast.makeText(OrderingProcess.this, "Aceptaste el contrato!", Toast.LENGTH_LONG).show();
-                                                                                                                                         }
-                                                                                                                                     });
-            }
-        });
 
         cancelarWork.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -154,6 +134,11 @@ public class OrderingProcess extends AppCompatActivity {
         });
     }
 
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+    }
 
     private void getCurrentClient() {
 
